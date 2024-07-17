@@ -21,6 +21,7 @@ use std::io;
 
 pub enum Focus {
     Jobs,
+    Stdout,
 }
 
 pub enum Dialog {
@@ -182,9 +183,11 @@ impl App {
                         KeyCode::Char('l') | KeyCode::Right => self.focus_next_panel(),
                         KeyCode::Char('k') | KeyCode::Up => match self.focus {
                             Focus::Jobs => self.select_previous_job(),
+                            Focus::Stdout => self.scroll_output_up(1),
                         },
                         KeyCode::Char('j') | KeyCode::Down => match self.focus {
                             Focus::Jobs => self.select_next_job(),
+                            Focus::Stdout => self.scroll_output_down(1),
                         },
                         KeyCode::PageDown => {
                             let delta = if key.modifiers.intersects(
@@ -196,16 +199,7 @@ impl App {
                             } else {
                                 1
                             };
-                            match self.job_output_anchor {
-                                ScrollAnchor::Top => {
-                                    self.job_output_offset =
-                                        self.job_output_offset.saturating_add(delta)
-                                }
-                                ScrollAnchor::Bottom => {
-                                    self.job_output_offset =
-                                        self.job_output_offset.saturating_sub(delta)
-                                }
-                            }
+                            self.scroll_output_down(delta);
                         }
                         KeyCode::PageUp => {
                             let delta = if key.modifiers.intersects(
@@ -217,25 +211,22 @@ impl App {
                             } else {
                                 1
                             };
-                            match self.job_output_anchor {
-                                ScrollAnchor::Top => {
-                                    self.job_output_offset =
-                                        self.job_output_offset.saturating_sub(delta)
-                                }
-                                ScrollAnchor::Bottom => {
-                                    self.job_output_offset =
-                                        self.job_output_offset.saturating_add(delta)
-                                }
+                            self.scroll_output_up(delta);
+                        }
+                        KeyCode::Home | KeyCode::Char('g') => match self.focus {
+                            Focus::Jobs => self.select_first_job(),
+                            Focus::Stdout => {
+                                self.job_output_offset = 0;
+                                self.job_output_anchor = ScrollAnchor::Top;
                             }
-                        }
-                        KeyCode::Home => {
-                            self.job_output_offset = 0;
-                            self.job_output_anchor = ScrollAnchor::Top;
-                        }
-                        KeyCode::End => {
-                            self.job_output_offset = 0;
-                            self.job_output_anchor = ScrollAnchor::Bottom;
-                        }
+                        },
+                        KeyCode::End | KeyCode::Char('G') => match self.focus {
+                            Focus::Jobs => self.select_last_job(),
+                            Focus::Stdout => {
+                                self.job_output_offset = 0;
+                                self.job_output_anchor = ScrollAnchor::Bottom;
+                            }
+                        },
                         KeyCode::Char('c') => {
                             if let Some(id) = self
                                 .job_list_state
@@ -252,7 +243,7 @@ impl App {
                             };
                         }
                         _ => {}
-                    };
+                    }
                 }
             }
         }
@@ -379,6 +370,7 @@ impl App {
                     } else {
                         match self.focus {
                             Focus::Jobs => Style::default().fg(Color::Green),
+                            _ => Style::default(),
                         }
                     }),
             )
@@ -463,7 +455,17 @@ impl App {
                 Style::default().add_modifier(Modifier::DIM),
             ),
         ]);
-        let log_block = Block::default().title(log_title).borders(Borders::ALL);
+        let log_block = Block::default()
+            .title(log_title)
+            .borders(Borders::ALL)
+            .border_style(if self.dialog.is_some() {
+                Style::default()
+            } else {
+                match self.focus {
+                    Focus::Stdout => Style::default().fg(Color::Green),
+                    _ => Style::default(),
+                }
+            });
 
         let log = match self.job_output.as_deref() {
             Ok(s) => Paragraph::new(string_for_paragraph(
@@ -545,7 +547,7 @@ pub fn process_terminal_output(input: &str) -> Vec<String> {
 fn string_for_paragraph(s: &str, lines: usize, anchor: ScrollAnchor, offset: usize) -> String {
     // skip everything after last line delimiter
     let s = s.rsplit_once(&['\r', '\n']).map_or(s, |(p, _)| p);
-    
+
     let l = process_terminal_output(s);
     let l = match anchor {
         ScrollAnchor::Top => l
@@ -571,14 +573,24 @@ fn string_for_paragraph(s: &str, lines: usize, anchor: ScrollAnchor, offset: usi
 impl App {
     fn focus_next_panel(&mut self) {
         match self.focus {
-            Focus::Jobs => self.focus = Focus::Jobs,
+            Focus::Jobs => self.focus = Focus::Stdout,
+            Focus::Stdout => self.focus = Focus::Jobs,
         }
     }
 
     fn focus_previous_panel(&mut self) {
         match self.focus {
-            Focus::Jobs => self.focus = Focus::Jobs,
+            Focus::Jobs => self.focus = Focus::Stdout,
+            Focus::Stdout => self.focus = Focus::Jobs,
         }
+    }
+
+    fn select_first_job(&mut self) {
+        self.job_list_state.select(Some(0));
+    }
+
+    fn select_last_job(&mut self) {
+        self.job_list_state.select(Some(self.jobs.len() - 1));
     }
 
     fn select_next_job(&mut self) {
@@ -607,5 +619,26 @@ impl App {
             None => 0,
         };
         self.job_list_state.select(Some(i));
+    }
+
+    fn scroll_output_down(&mut self, delta: u16) {
+        match self.job_output_anchor {
+            ScrollAnchor::Top => {
+                self.job_output_offset = self.job_output_offset.saturating_add(delta)
+            }
+            ScrollAnchor::Bottom => {
+                self.job_output_offset = self.job_output_offset.saturating_sub(delta)
+            }
+        }
+    }
+    fn scroll_output_up(&mut self, delta: u16) {
+        match self.job_output_anchor {
+            ScrollAnchor::Top => {
+                self.job_output_offset = self.job_output_offset.saturating_sub(delta)
+            }
+            ScrollAnchor::Bottom => {
+                self.job_output_offset = self.job_output_offset.saturating_add(delta)
+            }
+        }
     }
 }
