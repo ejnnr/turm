@@ -55,6 +55,7 @@ pub struct App {
     receiver: Receiver<AppMessage>,
     input_receiver: Receiver<std::io::Result<Event>>,
     output_file_view: OutputFileView,
+    selected_job_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -127,6 +128,7 @@ impl App {
             receiver: receiver,
             input_receiver: input_receiver,
             output_file_view: OutputFileView::default(),
+            selected_job_id: None,
         }
     }
 }
@@ -160,7 +162,10 @@ impl App {
 
     fn handle(&mut self, msg: AppMessage) {
         match msg {
-            AppMessage::Jobs(jobs) => self.jobs = jobs,
+            AppMessage::Jobs(jobs) => {
+                // Update the job list and maintain selection
+                self.update_jobs_and_selection(jobs);
+            }
             AppMessage::JobOutput(content) => self.job_output = content,
             AppMessage::Key(key) => {
                 if let Some(dialog) = &self.dialog {
@@ -260,6 +265,66 @@ impl App {
                     OutputFileView::Stderr => j.stderr.clone(),
                 })
             }));
+    }
+
+    fn update_jobs_and_selection(&mut self, new_jobs: Vec<Job>) {
+        if let Some(selected_id) = &self.selected_job_id {
+            // Find the index of the currently selected job in the new job list
+            let new_index = new_jobs.iter().position(|job| job.id() == *selected_id);
+
+            if let Some(index) = new_index {
+                // Update the job list state if the job is still present
+                self.job_list_state.select(Some(index));
+            } else if !new_jobs.is_empty() {
+                // Reset selection if the job is no longer in the list
+                self.select_first_job();
+            } else {
+                self.select_job(None);
+            }
+        } else if self.jobs.is_empty() && !new_jobs.is_empty() {
+            // If there were no jobs before and now there are, select the first one
+            self.select_first_job();
+        }
+
+        // Update the jobs list
+        self.jobs = new_jobs;
+    }
+
+    fn select_job(&mut self, index: Option<usize>) {
+        self.job_list_state.select(index);
+        self.selected_job_id = index.and_then(|i| self.jobs.get(i).map(|job| job.id()));
+    }
+
+    fn select_next_job(&mut self) {
+        if let Some(i) = self.job_list_state.selected() {
+            if i < self.jobs.len() - 1 {
+                self.select_job(Some(i + 1));
+            }
+        } else if !self.jobs.is_empty() {
+            self.select_job(Some(0));
+        }
+    }
+
+    fn select_previous_job(&mut self) {
+        if let Some(i) = self.job_list_state.selected() {
+            if i > 0 {
+                self.select_job(Some(i - 1));
+            }
+        } else if !self.jobs.is_empty() {
+            self.select_job(Some(self.jobs.len() - 1));
+        }
+    }
+
+    fn select_first_job(&mut self) {
+        if !self.jobs.is_empty() {
+            self.select_job(Some(0));
+        }
+    }
+
+    fn select_last_job(&mut self) {
+        if !self.jobs.is_empty() {
+            self.select_job(Some(self.jobs.len() - 1));
+        }
     }
 
     fn ui(&mut self, f: &mut Frame) {
@@ -587,42 +652,6 @@ impl App {
             Focus::Jobs => self.focus = Focus::Stdout,
             Focus::Stdout => self.focus = Focus::Jobs,
         }
-    }
-
-    fn select_first_job(&mut self) {
-        self.job_list_state.select(Some(0));
-    }
-
-    fn select_last_job(&mut self) {
-        self.job_list_state.select(Some(self.jobs.len() - 1));
-    }
-
-    fn select_next_job(&mut self) {
-        let i = match self.job_list_state.selected() {
-            Some(i) => {
-                if i >= self.jobs.len() - 1 {
-                    self.jobs.len() - 1
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.job_list_state.select(Some(i));
-    }
-
-    fn select_previous_job(&mut self) {
-        let i = match self.job_list_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    0
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.job_list_state.select(Some(i));
     }
 
     fn scroll_output_down(&mut self, delta: u16) {

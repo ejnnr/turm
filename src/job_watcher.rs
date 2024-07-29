@@ -165,8 +165,7 @@ impl JobWatcher {
             "qos",
         ];
         let output_format = fields.join(",");
-        let mut command = Command::new("sacct");
-        command
+        Command::new("sacct")
             .args(&self.sacct_args)
             .arg("--array")
             .arg("--noheader")
@@ -181,11 +180,11 @@ impl JobWatcher {
             .arg("--endtime")
             .arg("now")
             .arg("--state")
-            .arg("COMPLETED,CANCELLED,FAILED,TIMEOUT,PREEMPTED,OUT_OF_MEMORY");
-
-        let out = command.output().expect("failed to execute process").stdout;
-
-        out.lines()
+            .arg("COMPLETED,CANCELLED,FAILED,TIMEOUT,PREEMPTED,OUT_OF_MEMORY")
+            .output()
+            .expect("failed to execute process")
+            .stdout
+            .lines()
             .map(|l| l.unwrap().trim().to_string())
             .filter_map(|l| {
                 let parts: Vec<_> = l.split(output_separator).collect();
