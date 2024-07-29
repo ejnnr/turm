@@ -57,6 +57,7 @@ pub struct App {
     output_file_view: OutputFileView,
 }
 
+#[derive(Clone)]
 pub struct Job {
     pub job_id: String,
     pub array_id: String,
@@ -73,6 +74,7 @@ pub struct Job {
     pub stdout: Option<PathBuf>,
     pub stderr: Option<PathBuf>,
     pub command: String,
+    pub qos: String,
 }
 
 impl Job {
@@ -96,6 +98,7 @@ impl App {
         slurm_refresh_rate: u64,
         file_refresh_rate: u64,
         squeue_args: Vec<String>,
+        sacct_args: Vec<String>,
     ) -> App {
         let (sender, receiver) = unbounded();
         Self {
@@ -106,6 +109,7 @@ impl App {
                 sender.clone(),
                 Duration::from_secs(slurm_refresh_rate),
                 squeue_args,
+                sacct_args,
             ),
             job_list_state: {
                 let mut s = ListState::default();
@@ -309,12 +313,7 @@ impl App {
         // Jobs
         let max_id_len = self.jobs.iter().map(|j| j.id().len()).max().unwrap_or(0);
         let max_user_len = self.jobs.iter().map(|j| j.user.len()).max().unwrap_or(0);
-        let max_partition_len = self
-            .jobs
-            .iter()
-            .map(|j| j.partition.len())
-            .max()
-            .unwrap_or(0);
+        let max_qos_len = self.jobs.iter().map(|j| j.qos.len()).max().unwrap_or(0);
         let max_time_len = self.jobs.iter().map(|j| j.time.len()).max().unwrap_or(0);
         let max_state_compact_len = self
             .jobs
@@ -342,7 +341,7 @@ impl App {
                     ),
                     Span::raw(" "),
                     Span::styled(
-                        format!("{:<max$.max$}", j.partition, max = max_partition_len),
+                        format!("{:<max$.max$}", j.qos, max = max_qos_len),
                         Style::default().fg(Color::Blue),
                     ),
                     Span::raw(" "),
@@ -386,7 +385,7 @@ impl App {
 
         let job_detail = job_detail.map(|j| {
             let state = Line::from(vec![
-                Span::styled("State  ", Style::default().fg(Color::Yellow)),
+                Span::styled("State    ", Style::default().fg(Color::Yellow)),
                 Span::raw(" "),
                 Span::raw(&j.state),
                 if let Some(s) = j.reason.as_deref() {
@@ -400,23 +399,28 @@ impl App {
             ]);
 
             let command = Line::from(vec![
-                Span::styled("Command", Style::default().fg(Color::Yellow)),
+                Span::styled("Command  ", Style::default().fg(Color::Yellow)),
                 Span::raw(" "),
                 Span::raw(&j.command),
             ]);
             let nodes = Line::from(vec![
-                Span::styled("Nodes  ", Style::default().fg(Color::Yellow)),
+                Span::styled("Nodes    ", Style::default().fg(Color::Yellow)),
                 Span::raw(" "),
                 Span::raw(&j.nodelist),
             ]);
             let tres = Line::from(vec![
-                Span::styled("TRES   ", Style::default().fg(Color::Yellow)),
+                Span::styled("TRES     ", Style::default().fg(Color::Yellow)),
                 Span::raw(" "),
                 Span::raw(&j.tres),
             ]);
+            let partition = Line::from(vec![
+                Span::styled("Partition", Style::default().fg(Color::Yellow)),
+                Span::raw(" "),
+                Span::raw(&j.partition),
+            ]);
             let ui_stdout_text = match self.output_file_view {
-                OutputFileView::Stdout => "stdout ",
-                OutputFileView::Stderr => "stderr ",
+                OutputFileView::Stdout => "stdout   ",
+                OutputFileView::Stderr => "stderr   ",
             };
             let stdout = Line::from(vec![
                 Span::styled(ui_stdout_text, Style::default().fg(Color::Yellow)),
@@ -432,7 +436,7 @@ impl App {
                 ),
             ]);
 
-            Text::from(vec![state, command, nodes, tres, stdout])
+            Text::from(vec![state, command, nodes, tres, partition, stdout])
         });
         let job_detail = Paragraph::new(job_detail.unwrap_or_default())
             .block(Block::default().title("Details").borders(Borders::ALL));

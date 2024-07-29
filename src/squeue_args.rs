@@ -148,4 +148,75 @@ impl SqueueArgs {
         }
         args
     }
+
+    pub fn to_sacct_vec(&self) -> Vec<String> {
+        let mut args = Vec::new();
+        if let Some(account) = &self.account {
+            args.push(format!("--account={}", account));
+        }
+        if self.all {
+            args.push("--all".to_string());
+        }
+        if self.federation {
+            args.push("--federation".to_string());
+        }
+        if self.hide {
+            args.push("--hide".to_string());
+        }
+        if let Some(job) = &self.job {
+            args.push(format!("--job={}", job));
+        }
+        if self.local {
+            args.push("--local".to_string());
+        }
+        if let Some(licenses) = &self.licenses {
+            args.push(format!("--licenses={}", licenses));
+        }
+        if let Some(clusters) = &self.clusters {
+            args.push(format!("--clusters={}", clusters));
+        }
+        if self.me {
+            // --me is only supported by squeue, not sacct, so we make it explicit
+            args.push(format!(
+                "--user={}",
+                std::env::var("USER").unwrap_or_default()
+            ));
+        } else {
+            args.push("--allusers".to_string());
+        }
+        if let Some(name) = &self.name {
+            args.push(format!("--name={}", name));
+        }
+        if self.noconvert {
+            args.push("--noconvert".to_string());
+        }
+        if let Some(partition) = &self.partition {
+            args.push(format!("--partition={}", partition));
+        }
+        if let Some(qos) = &self.qos {
+            args.push(format!("--qos={}", qos));
+        }
+        if let Some(reservation) = &self.reservation {
+            args.push(format!("--reservation={}", reservation));
+        }
+        if self.sibling {
+            args.push("--sibling".to_string());
+        }
+        if let Some(step) = &self.step {
+            args.push(format!("--step={}", step));
+        }
+        if let Some(sort) = &self.sort {
+            args.push(format!("--sort={}", sort));
+        }
+        if let Some(states) = &self.states {
+            args.push(format!("--states={}", states));
+        }
+        if let Some(user) = &self.user {
+            args.push(format!("--user={}", user));
+        }
+        if let Some(nodelist) = &self.nodelist {
+            args.push(format!("--nodelist={}", nodelist));
+        }
+        args
+    }
 }

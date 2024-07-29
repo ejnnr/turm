@@ -93,6 +93,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, args: Cli) -> io::Result<()> 
         args.slurm_refresh,
         args.file_refresh,
         args.squeue_args.to_vec(),
+        args.squeue_args.to_sacct_vec(),
     );
     thread::spawn(move || input_loop(input_tx));
     app.run(terminal)
